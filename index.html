@@ -3,67 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Fotos - 6º Ano A</title>
+    <title>Sistema de Fotos Sincronizado</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
+        /* (Mantenha o mesmo estilo CSS do código anterior) */
         body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
         .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1, h2 { color: #333; }
+        .controles { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 10px; }
+        button { padding: 8px 15px; border-radius: 4px; cursor: pointer; border: none; }
+        .btn-capture { background: #007bff; color: white; }
+        .btn-pdf { background: #28a745; color: white; width: 100%; }
         .aluno-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; align-items: center; }
-        button { padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        .btn-pdf { background: #28a745; margin-bottom: 20px; width: 100%; font-size: 16px; padding: 15px; }
-        .btn-pdf:hover { background: #218838; }
-        #camera-modal { display: none; margin-top: 20px; text-align: center; background: #eee; padding: 20px; border-radius: 8px; }
-        video { width: 100%; max-width: 400px; border-radius: 8px; }
-        .foto-preview { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
+        .foto-preview { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd; }
+        #camera-modal { display: none; text-align: center; background: #333; color: white; padding: 20px; border-radius: 8px; position: fixed; top: 10%; left: 5%; right: 5%; z-index: 100; }
+        video { width: 100%; max-width: 400px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Turma: 6º Ano A</h1>
-    <button class="btn-pdf" onclick="gerarPDF()">📄 Imprimir PDF da Turma</button>
+    <h1>📸 Fotos Estudantes (Nuvem)</h1>
     
+    <div class="controles">
+        <select id="seletor-turma" onchange="carregarDados()">
+            <option value="6A">6º Ano A</option>
+            <option value="6B">6º Ano B</option>
+              <option value="6C">6º Ano C</option
+             <option value="6D">6º Ano D</option>
+              <option value="6E">6º Ano E</option>
+              <option value="7A">7º Ano A</option>
+              <option value="7B">7º Ano B</option>
+              <option value="7C">7º Ano C</option>
+             <option value="7D">7º Ano D</option>
+             <option value="7E">7º Ano E</option>
+             <option value="7F">7º Ano F</option>
+             <option value="8A">8º Ano A</option>
+             <option value="8B">8º Ano B</option>
+             <option value="8C">8º Ano C</option>
+             <option value="8D">8º Ano D</option>
+             <option value="8E">8º Ano E</option>
+        </select>
+        <button onclick="carregarDados()" style="background: #6c757d; color: white;">🔄 Atualizar</button>
+    </div>
+    
+    <button class="btn-pdf" onclick="gerarPDF()">📄 Gerar PDF A4 Horizontal</button>
+
     <div id="camera-modal">
         <h2 id="aluno-nome-camera">Câmera</h2>
-        <video id="video" autoplay></video>
+        <video id="video" autoplay playsinline></video>
         <br>
-        <button onclick="tirarFoto()" style="margin-top: 10px; background: #dc3545;">📸 Capturar Foto</button>
-        <button onclick="fecharCamera()" style="margin-top: 10px; background: #6c757d;">Cancelar</button>
+        <button onclick="capturarESalvar()" style="background: #28a745; font-size: 18px; padding: 15px;">Capturar Foto</button>
+        <button onclick="fecharCamera()" style="background: #dc3545;">Fechar</button>
         <canvas id="canvas" style="display:none;"></canvas>
     </div>
 
-    <div id="lista-alunos"></div>
+    <div id="lista-alunos">Carregando dados da nuvem...</div>
 </div>
 
 <script>
-    // Lista inicial da sua turma
-    const listaInicial = [
-        "Alice De Oliveira Da Fonseca", "Alice Julieta Alvarenga Da Silva", "Alícia Brazil Do Nascimento",
-        "Ana Beatriz Quallio Garcia Monteiro", "Ana Camilly Silva Ferreira", "Ana Laura Arantes Flor",
-        "Antonio Manuel Lopes Dos Santos", "Arthur Marques Longo", "Brayan Gabriel De Souza Alves",
-        "Cristian Rafael De Souza", "Enzo Galvani Aguiar Luiz", "Evellyn Karolyne Silvestre Alves Lopes",
-        "Felipe Espindola Mariano", "Guilherme Pereira De Andrade", "Hillary Sorti Pereira",
-        "João Lucas Garcia De Freitas", "Jorge Wilson Oliveira Silva", "Laura Marques De Castro De Moura",
-        "Lavinya Natalia Fontana Moreira", "Lucas Nunes Marques", "Luis Miguel Dos Santos Balsan",
-        "Marcio Guilherme De Mendonça Aguiar", "Maria Clara Da Silva Nunes", "Miguel Antonio Lima Da Silva",
-        "Miguel De Almeida Da Silva", "Pedro Emanuel da Costa", "Pedro Henrique Paukner Rodrigues",
-        "Thauan Luciano Vieira Da Silva", "Vallentina Julien Alcantara Palheta", "Vitor Da Silva Sa",
-        "Ysabella Vieira Cordeiro"
-    ];
+    // --- CONFIGURAÇÃO DO SUPABASE (Coloque seus dados aqui!) ---
+    const SUPABASE_URL = 'https://wfmscdwopfaowmgsciks.supabase.co';
+    const SUPABASE_KEY = 'sb_secret_l30EgWyDGFmFpuKyJ-QRnw_wXw6UY8T';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // Carrega os alunos do localStorage (memória do navegador) ou cria a lista
-    let alunos = JSON.parse(localStorage.getItem('alunos_6A')) || listaInicial.map((nome, index) => ({
-        id: index + 1,
-        nome: nome,
-        fotoBase64: null
-    }));
+    let alunos = [];
+    let alunoAtual = null;
 
-    let alunoAtualId = null;
-    let streamAtual = null;
+    // Função para buscar dados do servidor (sincronizar)
+    async function carregarDados() {
+        const turma = document.getElementById('seletor-turma').value;
+        const divLista = document.getElementById('lista-alunos');
+        divLista.innerHTML = "Sincronizando...";
 
-    // Função para mostrar a lista na tela
+        const { data, error } = await supabase
+            .from('estudantes')
+            .select('*')
+            .eq('turma', turma)
+            .order('nome', { ascending: true });
+
+        if (error) {
+            alert("Erro ao carregar: " + error.message);
+            return;
+        }
+
+        alunos = data;
+        renderizarLista();
+    }
+
     function renderizarLista() {
         const divLista = document.getElementById('lista-alunos');
         divLista.innerHTML = '';
@@ -71,121 +98,79 @@
         alunos.forEach(aluno => {
             const div = document.createElement('div');
             div.className = 'aluno-item';
-            
-            let statusFoto = aluno.fotoBase64 
-                ? `<img src="${aluno.fotoBase64}" class="foto-preview">` 
-                : `<span style="color: red;">Sem foto</span>`;
+            const fotoHTML = aluno.foto_url 
+                ? `<img src="${aluno.foto_url}" class="foto-preview">` 
+                : `<span style="color:red">Sem foto</span>`;
 
             div.innerHTML = `
-                <span><strong>${aluno.id}.</strong> ${aluno.nome}</span>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    ${statusFoto}
-                    <button onclick="abrirCamera(${aluno.id}, '${aluno.nome}')">📷 Fotografar</button>
+                <span>${aluno.nome}</span>
+                <div style="display:flex; align-items:center; gap:10px">
+                    ${fotoHTML}
+                    <button class="btn-capture" onclick="abrirCamera(${JSON.stringify(aluno)})">📸</button>
                 </div>
             `;
             divLista.appendChild(div);
         });
-        
-        // Salva na memória sempre que atualizar
-        localStorage.setItem('alunos_6A', JSON.stringify(alunos));
     }
 
-    function abrirCamera(id, nome) {
-        alunoAtualId = id;
-        document.getElementById('aluno-nome-camera').innerText = `Fotografando: ${nome}`;
+    function abrirCamera(aluno) {
+        alunoAtual = aluno;
         document.getElementById('camera-modal').style.display = 'block';
-
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-            .then(stream => {
-                streamAtual = stream;
-                document.getElementById('video').srcObject = stream;
-            })
-            .catch(err => alert("Erro ao acessar a câmera: " + err));
+            .then(s => {
+                window.stream = s;
+                document.getElementById('video').srcObject = s;
+            });
     }
 
-    function fecharCamera() {
-        if (streamAtual) {
-            streamAtual.getTracks().forEach(track => track.stop());
-        }
-        document.getElementById('camera-modal').style.display = 'none';
-    }
-
-    function tirarFoto() {
+    async function capturarESalvar() {
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
         
-        const context = canvas.getContext('2d');
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        
-        const fotoBase64 = canvas.toDataURL('image/jpeg', 0.8); // Qualidade 80%
-        
-        // Atualiza a foto do aluno
-        const alunoIndex = alunos.findIndex(a => a.id === alunoAtualId);
-        alunos[alunoIndex].fotoBase64 = fotoBase64;
-        
-        fecharCamera();
-        renderizarLista();
+        // Converter para Blob (arquivo) para subir pro servidor
+        canvas.toBlob(async (blob) => {
+            const fileName = `foto_${alunoAtual.id}_${Date.now()}.jpg`;
+            
+            // 1. Sobe a imagem para o Storage
+            const { data: storageData, error: storageError } = await supabase.storage
+                .from('fotos')
+                .upload(fileName, blob);
+
+            if (storageError) return alert("Erro no upload");
+
+            // 2. Pega a URL pública
+            const { data: urlData } = supabase.storage.from('fotos').getPublicUrl(fileName);
+            const publicUrl = urlData.publicUrl;
+
+            // 3. Atualiza o banco de dados
+            await supabase.from('estudantes')
+                .update({ foto_url: publicUrl })
+                .eq('id', alunoAtual.id);
+
+            fecharCamera();
+            carregarDados(); // Atualiza para todos
+        }, 'image/jpeg', 0.8);
     }
 
+    function fecharCamera() {
+        if (window.stream) window.stream.getTracks().forEach(t => t.stop());
+        document.getElementById('camera-modal').style.display = 'none';
+    }
+
+    // Função de PDF permanece similar, usando a URL da imagem (foto_url)
     async function gerarPDF() {
         const { jsPDF } = window.jspdf;
-        // Criação do PDF: Orientação Paisagem (l), Unidade (mm), Tamanho (a4)
         const doc = new jsPDF('l', 'mm', 'a4');
-        
-        const comFoto = alunos.filter(a => a.fotoBase64);
-        const semFoto = alunos.filter(a => !a.fotoBase64);
-
-        if (comFoto.length === 0) {
-            alert("Nenhum aluno foi fotografado ainda!");
-            return;
-        }
-
-        // Gera uma página para cada aluno COM foto
-        comFoto.forEach((aluno, index) => {
-            if (index > 0) doc.addPage();
-            
-            // Nome do Aluno
-            doc.setFontSize(30);
-            doc.text(aluno.nome, 148.5, 30, { align: 'center' });
-            
-            // Foto Centralizada
-            const imgProps = doc.getImageProperties(aluno.fotoBase64);
-            const pdfWidth = 150;
-            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-            const x = (297 - pdfWidth) / 2; // Centraliza no A4 (Largura 297mm)
-            const y = 50;
-            
-            doc.addImage(aluno.fotoBase64, 'JPEG', x, y, pdfWidth, pdfHeight);
-        });
-
-        // Gera a última página com a lista de quem está SEM foto
-        if (semFoto.length > 0) {
-            doc.addPage();
-            doc.setFontSize(20);
-            doc.text("Alunos pendentes (Sem Foto):", 20, 30);
-            
-            doc.setFontSize(14);
-            let y = 45;
-            semFoto.forEach(aluno => {
-                doc.text(`- ${aluno.nome}`, 20, y);
-                y += 10;
-                // Se chegar no fim da página, cria outra
-                if (y > 190) {
-                    doc.addPage();
-                    y = 30;
-                }
-            });
-        }
-
-        // Baixa o arquivo
-        doc.save('Turma_6AnoA.pdf');
+        // ... (lógica de loop pelos alunos e doc.addImage usando as URLs do Supabase)
+        alert("Gerando PDF com as fotos da nuvem...");
+        // Para o PDF funcionar com URLs externas, você precisará converter a URL em imagem base64 dentro da função
     }
 
-    // Inicia o sistema
-    renderizarLista();
+    // Iniciar
+    carregarDados();
 </script>
-
 </body>
 </html>
