@@ -42,7 +42,7 @@ video { width: 100%; max-width: 400px; background: #000; border-radius: 8px; }
 </select>
 
 <button onclick="carregarDados()">🔄 Atualizar</button>
-<button onclick="gerarPDF()" style="background: #28a745; color: white; border: none;">📄 Gerar PDF</button>
+<button id="btn-pdf" onclick="gerarPDF()" style="background: #28a745; color: white; border: none;">📄 Gerar PDF</button>
 
 <div id="lista-alunos" style="margin-top: 20px;">Carregando...</div>
 </div>
@@ -61,12 +61,11 @@ video { width: 100%; max-width: 400px; background: #000; border-radius: 8px; }
 const SUPABASE_URL = 'https://wfmscdwopfaowmgsciks.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_AmrPPfxoZFYSx3gxF1jeuA_ykEv0yZC';
 
-// ✅ CORRETO
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let alunos = [];
-let alunoAtual = null; // Guarda o aluno que está sendo fotografado
-let streamOriginal = null; // Guarda o acesso à câmera
+let alunoAtual = null; 
+let streamOriginal = null; 
 
 async function carregarDados() {
     const turma = document.getElementById('seletor-turma').value;
@@ -113,10 +112,7 @@ function renderizar() {
     div.innerHTML = htmlTemp;
 }
 
-// ==========================================
-// FUNÇÕES DA CÂMERA ADICIONADAS
-// ==========================================
-
+// Funções da Câmera
 function abrirCamera(id, nome, turma) {
     alunoAtual = { id, nome, turma };
     document.getElementById('nome-aluno-camera').innerText = "Fotografando: " + nome;
@@ -156,7 +152,6 @@ async function capturarESalvar() {
     canvas.toBlob(async (blob) => {
         const fileName = `foto_${alunoAtual.turma}_${alunoAtual.id}_${Date.now()}.jpg`;
 
-        // 1. Faz o upload da imagem pro Supabase Storage
         const { error: uploadError } = await supabaseClient.storage
             .from('fotos')
             .upload(fileName, blob);
@@ -167,35 +162,46 @@ async function capturarESalvar() {
             return;
         }
 
-        // 2. Pega a URL pública da foto
         const { data: urlData } = supabaseClient.storage
             .from('fotos')
             .getPublicUrl(fileName);
 
-        // 3. Atualiza o banco de dados do aluno com a URL da foto
         await supabaseClient.from('estudantes')
             .update({ foto_url: urlData.publicUrl })
             .eq('id', alunoAtual.id);
 
         fecharCamera();
-        carregarDados(); // Recarrega a lista para mostrar a foto nova
+        carregarDados(); 
     }, 'image/jpeg', 0.8);
 }
 
 // ==========================================
-// FUNÇÕES DO PDF 
+// FUNÇÕES DO PDF (ATUALIZADAS)
 // ==========================================
 
 async function gerarPDF() {
+    const btn = document.getElementById('btn-pdf');
+    btn.disabled = true;
+    btn.innerText = "⏳ Gerando PDF... (Aguarde)";
+
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    
+    // 'l' = formato paisagem (landscape), 'mm' = milímetros, 'a4' = tamanho da folha
+    const doc = new jsPDF('l', 'mm', 'a4'); 
+
+    // Pega o nome da turma e o valor (Ex: "6º Ano A" e "6A")
+    const seletor = document.getElementById('seletor-turma');
+    const turmaTexto = seletor.options[seletor.selectedIndex].text; 
+    const turmaValor = seletor.value; 
+
+    // Dimensões exatas de uma folha A4 em paisagem
+    const pdfLargura = 297;
+    const pdfAltura = 210;
 
     for (let i = 0; i < alunos.length; i++) {
         const aluno = alunos[i];
 
         if (i > 0) doc.addPage();
-
-        doc.text(aluno.nome, 20, 20);
 
         if (aluno.foto_url) {
             try {
@@ -207,17 +213,62 @@ async function gerarPDF() {
 
                 await new Promise(res => {
                     reader.onloadend = () => {
-                        doc.addImage(reader.result, 'JPEG', 20, 30, 100, 100);
+                        const imgData = reader.result;
+                        const imgProps = doc.getImageProperties(imgData);
+                        
+                        // Cálculo para fazer a foto preencher a tela inteira sem distorcer (efeito Cover)
+                        const imgRatio = imgProps.width / imgProps.height;
+                        const pdfRatio = pdfLargura / pdfAltura;
+                        
+                        let w, h, x, y;
+                        
+                        if (imgRatio > pdfRatio) {
+                            h = pdfAltura;
+                            w = pdfAltura * imgRatio;
+                            x = (pdfLargura - w) / 2;
+                            y = 0;
+                        } else {
+                            w = pdfLargura;
+                            h = pdfLargura / imgRatio;
+                            x = 0;
+                            y = (pdfAltura - h) / 2;
+                        }
+                        
+                        // 1. Desenha a foto ocupando a página inteira
+                        doc.addImage(imgData, 'JPEG', x, y, w, h);
+                        
+                        // 2. Desenha uma faixa branca no rodapé para o texto
+                        doc.setFillColor(255, 255, 255);
+                        doc.rect(0, 190, pdfLargura, 20, 'F');
+                        
+                        // 3. Escreve o Nome Completo + Turma na faixa branca
+                        doc.setFontSize(22);
+                        doc.setTextColor(0, 0, 0); // Texto preto
+                        doc.text(`${aluno.nome} - ${turmaTexto}`, pdfLargura / 2, 203, { align: "center" });
+
                         res();
                     }
                 });
             } catch {
-                doc.text("Erro na imagem", 20, 40);
+                doc.setFontSize(22);
+                doc.text(`Erro ao carregar imagem - ${aluno.nome}`, pdfLargura / 2, pdfAltura / 2, { align: "center" });
             }
+        } else {
+            // Layout para aluno sem foto
+            doc.setFontSize(26);
+            doc.text(`${aluno.nome} - ${turmaTexto}`, pdfLargura / 2, 100, { align: "center" });
+            doc.setFontSize(16);
+            doc.setTextColor(150, 150, 150);
+            doc.text("(Sem foto cadastrada)", pdfLargura / 2, 115, { align: "center" });
         }
     }
 
-    doc.save("alunos.pdf");
+    // Salva o arquivo com o formato solicitado: TURMA_xxx_2026.pdf
+    doc.save(`TURMA_${turmaValor}_2026.pdf`);
+    
+    // Restaura o botão
+    btn.disabled = false;
+    btn.innerText = "📄 Gerar PDF";
 }
 
 carregarDados();
