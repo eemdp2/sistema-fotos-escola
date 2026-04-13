@@ -11,9 +11,14 @@
 <style>
 body { font-family: Arial; background:#eef2f5; padding:20px; }
 .container { max-width:800px; margin:auto; background:white; padding:30px; border-radius:10px; }
-button { cursor:pointer; }
-.aluno-item { display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; }
+button { cursor:pointer; padding: 8px 12px; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
+button:hover { background: #f0f0f0; }
+.aluno-item { display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; align-items: center; }
 .foto-preview { width:50px; height:50px; border-radius:50%; object-fit:cover; }
+
+/* Estilos da Câmera */
+#camera-modal { display: none; position: fixed; top: 10%; left: 5%; right: 5%; background: white; padding: 20px; border-radius: 10px; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.3); text-align: center; }
+video { width: 100%; max-width: 400px; background: #000; border-radius: 8px; }
 </style>
 </head>
 
@@ -22,24 +27,34 @@ button { cursor:pointer; }
 <div class="container">
 <h2>📸 Sistema de Fotos</h2>
 
-<select id="seletor-turma" onchange="carregarDados()">
-<option value="6A">6º Ano A</option>
-            <option value="6B">6º Ano B</option>
-            <option value="6C">6º Ano C</option>
-            <option value="6D">6º Ano D</option>
-            <option value="6E">6º Ano E</option>
-            <option value="7A">7º Ano A</option>
-            <option value="7B">7º Ano B</option>
-            <option value="7C">7º Ano C</option>
-            <option value="7D">7º Ano D</option>
-            <option value="7E">7º Ano E</option>
-            <option value="7F">7º Ano F</option>
+<select id="seletor-turma" onchange="carregarDados()" style="padding: 8px;">
+    <option value="6A">6º Ano A</option>
+    <option value="6B">6º Ano B</option>
+    <option value="6C">6º Ano C</option>
+    <option value="6D">6º Ano D</option>
+    <option value="6E">6º Ano E</option>
+    <option value="7A">7º Ano A</option>
+    <option value="7B">7º Ano B</option>
+    <option value="7C">7º Ano C</option>
+    <option value="7D">7º Ano D</option>
+    <option value="7E">7º Ano E</option>
+    <option value="7F">7º Ano F</option>
 </select>
 
-<button onclick="carregarDados()">Atualizar</button>
-<button onclick="gerarPDF()">Gerar PDF</button>
+<button onclick="carregarDados()">🔄 Atualizar</button>
+<button onclick="gerarPDF()" style="background: #28a745; color: white; border: none;">📄 Gerar PDF</button>
 
-<div id="lista-alunos">Carregando...</div>
+<div id="lista-alunos" style="margin-top: 20px;">Carregando...</div>
+</div>
+
+<div id="camera-modal">
+    <h3 id="nome-aluno-camera">Fotografando...</h3>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <div style="margin-top:15px; display:flex; gap:10px; justify-content: center;">
+        <button onclick="capturarESalvar()" id="btn-capturar" style="background: #007bff; color: white; border: none; padding: 10px 20px;">📸 Capturar e Salvar</button>
+        <button onclick="fecharCamera()" style="background: #dc3545; color: white; border: none; padding: 10px 20px;">Cancelar</button>
+    </div>
 </div>
 
 <script>
@@ -50,6 +65,8 @@ const SUPABASE_KEY = 'sb_publishable_AmrPPfxoZFYSx3gxF1jeuA_ykEv0yZC';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let alunos = [];
+let alunoAtual = null; // Guarda o aluno que está sendo fotografado
+let streamOriginal = null; // Guarda o acesso à câmera
 
 async function carregarDados() {
     const turma = document.getElementById('seletor-turma').value;
@@ -82,14 +99,92 @@ function renderizar() {
         return;
     }
 
+    let htmlTemp = "";
     alunos.forEach((a, i) => {
-        div.innerHTML += `
+        htmlTemp += `
         <div class="aluno-item">
             <span>${i+1}. ${a.nome}</span>
-            ${a.foto_url ? `<img src="${a.foto_url}" class="foto-preview">` : "Sem foto"}
+            <div style="display:flex; gap:10px; align-items:center;">
+                ${a.foto_url ? `<img src="${a.foto_url}" class="foto-preview">` : "<span style='color:red; font-size:12px;'>Sem foto</span>"}
+                <button onclick="abrirCamera('${a.id}', '${a.nome}', '${a.turma}')">📸 Fotografar</button>
+            </div>
         </div>`;
     });
+    div.innerHTML = htmlTemp;
 }
+
+// ==========================================
+// FUNÇÕES DA CÂMERA ADICIONADAS
+// ==========================================
+
+function abrirCamera(id, nome, turma) {
+    alunoAtual = { id, nome, turma };
+    document.getElementById('nome-aluno-camera').innerText = "Fotografando: " + nome;
+    document.getElementById('camera-modal').style.display = 'block';
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+            streamOriginal = stream;
+            document.getElementById('video').srcObject = stream;
+        })
+        .catch(err => {
+            alert("Erro ao acessar a câmera: " + err.message);
+            fecharCamera();
+        });
+}
+
+function fecharCamera() {
+    if (streamOriginal) {
+        streamOriginal.getTracks().forEach(track => track.stop());
+    }
+    document.getElementById('camera-modal').style.display = 'none';
+    document.getElementById('btn-capturar').innerText = "📸 Capturar e Salvar";
+    document.getElementById('btn-capturar').disabled = false;
+}
+
+async function capturarESalvar() {
+    const btn = document.getElementById('btn-capturar');
+    btn.disabled = true;
+    btn.innerText = "⏳ Salvando na nuvem...";
+
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    canvas.toBlob(async (blob) => {
+        const fileName = `foto_${alunoAtual.turma}_${alunoAtual.id}_${Date.now()}.jpg`;
+
+        // 1. Faz o upload da imagem pro Supabase Storage
+        const { error: uploadError } = await supabaseClient.storage
+            .from('fotos')
+            .upload(fileName, blob);
+
+        if (uploadError) {
+            alert("Erro ao enviar foto: " + uploadError.message);
+            fecharCamera();
+            return;
+        }
+
+        // 2. Pega a URL pública da foto
+        const { data: urlData } = supabaseClient.storage
+            .from('fotos')
+            .getPublicUrl(fileName);
+
+        // 3. Atualiza o banco de dados do aluno com a URL da foto
+        await supabaseClient.from('estudantes')
+            .update({ foto_url: urlData.publicUrl })
+            .eq('id', alunoAtual.id);
+
+        fecharCamera();
+        carregarDados(); // Recarrega a lista para mostrar a foto nova
+    }, 'image/jpeg', 0.8);
+}
+
+// ==========================================
+// FUNÇÕES DO PDF 
+// ==========================================
 
 async function gerarPDF() {
     const { jsPDF } = window.jspdf;
