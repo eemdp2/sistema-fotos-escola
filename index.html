@@ -1,53 +1,29 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Fotos - Escola</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #eef2f5; padding: 20px; color: #333; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
-        
-        .controles { display: flex; justify-content: space-between; margin-bottom: 25px; gap: 15px; flex-wrap: wrap; }
-        select { padding: 12px; font-size: 16px; border-radius: 6px; border: 1px solid #dcdcdc; flex-grow: 1; outline: none; transition: border-color 0.3s; }
-        select:focus { border-color: #007bff; }
-        
-        button { padding: 10px 18px; border-radius: 6px; cursor: pointer; border: none; font-size: 16px; font-weight: 600; transition: all 0.2s ease; }
-        button:active { transform: scale(0.98); }
-        
-        .btn-capture { background: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
-        .btn-capture:hover { background: #007bff; color: white; }
-        
-        .btn-pdf { background: #28a745; color: white; width: 100%; padding: 18px; font-size: 18px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(40,167,69,0.2); }
-        .btn-pdf:hover { background: #218838; }
-        .btn-pdf:disabled { background: #6c757d; cursor: not-allowed; box-shadow: none; opacity: 0.8; }
-        
-        .aluno-item { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #f0f0f0; align-items: center; transition: background-color 0.2s; }
-        .aluno-item:hover { background-color: #fafafa; }
-        .foto-preview { width: 55px; height: 55px; border-radius: 50%; object-fit: cover; border: 2px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        
-        /* Melhorias no Modal da Câmera */
-        #camera-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 99; backdrop-filter: blur(5px); }
-        #camera-modal { display: none; text-align: center; background: white; padding: 25px; border-radius: 12px; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; width: 90%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-        #camera-modal h2 { margin-top: 0; color: #333; }
-        video { width: 100%; max-width: 100%; border-radius: 8px; background: #000; }
-        
-        .status-msg { text-align: center; font-style: italic; color: #666; margin: 30px 0; font-size: 1.1em; }
-        .loading-spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-right: 10px; vertical-align: middle; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Fotos - Escola</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body { font-family: Arial; background:#eef2f5; padding:20px; }
+.container { max-width:800px; margin:auto; background:white; padding:30px; border-radius:10px; }
+button { cursor:pointer; }
+.aluno-item { display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; }
+.foto-preview { width:50px; height:50px; border-radius:50%; object-fit:cover; }
+</style>
 </head>
+
 <body>
 
 <div class="container">
-    <h1>📸 Sistema de Fotos Escolares</h1>
-    
-    <div class="controles">
-        <select id="seletor-turma" onchange="carregarDados()">
-            <option value="6A">6º Ano A</option>
+<h2>📸 Sistema de Fotos</h2>
+
+<select id="seletor-turma" onchange="carregarDados()">
+<option value="6A">6º Ano A</option>
             <option value="6B">6º Ano B</option>
             <option value="6C">6º Ano C</option>
             <option value="6D">6º Ano D</option>
@@ -58,225 +34,98 @@
             <option value="7D">7º Ano D</option>
             <option value="7E">7º Ano E</option>
             <option value="7F">7º Ano F</option>
-        </select>
-        <button onclick="carregarDados()" style="background: #6c757d; color: white;">🔄 Atualizar</button>
-    </div>
-    
-    <button id="btnGerarPdf" class="btn-pdf" onclick="gerarPDF()">📄 Imprimir PDF da Turma Atual</button>
+</select>
 
-    <div id="camera-backdrop"></div>
-    <div id="camera-modal">
-        <h2 id="aluno-nome-camera">Câmera</h2>
-        <video id="video" autoplay playsinline></video>
-        <br>
-        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
-            <button onclick="capturarESalvar()" id="btn-capturar" style="background: #28a745; color: white; flex: 2;">📸 Capturar e Salvar</button>
-            <button onclick="fecharCamera()" style="background: #dc3545; color: white; flex: 1;">Cancelar</button>
-        </div>
-        <canvas id="canvas" style="display:none;"></canvas>
-    </div>
+<button onclick="carregarDados()">Atualizar</button>
+<button onclick="gerarPDF()">Gerar PDF</button>
 
-    <div id="lista-alunos" class="status-msg">Carregando dados da nuvem...</div>
+<div id="lista-alunos">Carregando...</div>
 </div>
 
 <script>
-    const SUPABASE_URL = 'https://wfmscdwopfaowmgsciks.supabase.co'; 
-    const SUPABASE_KEY = 'sb_publishable_AmrPPfxoZFYSx3gxF1jeuA_ykEv0yZC';
+const SUPABASE_URL = 'https://wfmscdwopfaowmgsciks.supabase.co';
+const SUPABASE_KEY = 'SUA_CHAVE_AQUI';
 
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// ✅ CORRETO
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let alunos = [];
-    let alunoAtual = null;
+let alunos = [];
 
-    async function carregarDados() {
-        const turma = document.getElementById('seletor-turma').value;
-        const divLista = document.getElementById('lista-alunos');
-        divLista.innerHTML = `<div class="status-msg">⏳ Sincronizando turma ${turma}...</div>`;
+async function carregarDados() {
+    const turma = document.getElementById('seletor-turma').value;
+    const div = document.getElementById('lista-alunos');
 
-        const { data, error } = await supabase
-            .from('estudantes')
-            .select('*')
-            .eq('turma', turma)
-            .order('nome', { ascending: true });
+    div.innerHTML = "Carregando...";
 
-        if (error) {
-            divLista.innerHTML = `<div class="status-msg" style="color:red;">❌ Erro ao carregar: ${error.message}</div>`;
-            return;
-        }
+    const { data, error } = await supabaseClient
+        .from('estudantes')
+        .select('*')
+        .eq('turma', turma)
+        .order('nome');
 
-        alunos = data;
-        renderizarLista();
+    if (error) {
+        div.innerHTML = "Erro: " + error.message;
+        console.error(error);
+        return;
     }
 
-    function renderizarLista() {
-        const divLista = document.getElementById('lista-alunos');
-        divLista.innerHTML = '';
-        
-        if (alunos.length === 0) {
-            divLista.innerHTML = '<div class="status-msg">Nenhum aluno encontrado nesta turma.</div>';
-            return;
-        }
+    alunos = data;
+    renderizar();
+}
 
-        alunos.forEach((aluno, index) => {
-            const div = document.createElement('div');
-            div.className = 'aluno-item';
-            const fotoHTML = aluno.foto_url 
-                ? `<img src="${aluno.foto_url}" class="foto-preview" alt="Foto">` 
-                : `<span style="color:#dc3545; font-size: 13px; font-weight: bold;">Sem foto</span>`;
+function renderizar() {
+    const div = document.getElementById('lista-alunos');
+    div.innerHTML = "";
 
-            div.innerHTML = `
-                <span style="font-size: 15px;"><strong>${index + 1}.</strong> ${aluno.nome}</span>
-                <div style="display:flex; align-items:center; gap:15px">
-                    ${fotoHTML}
-                    <button class="btn-capture" onclick='abrirCamera(${JSON.stringify(aluno)})'>📸</button>
-                </div>
-            `;
-            divLista.appendChild(div);
-        });
+    if (alunos.length === 0) {
+        div.innerHTML = "Nenhum aluno encontrado.";
+        return;
     }
 
-    function abrirCamera(aluno) {
-        alunoAtual = aluno;
-        document.getElementById('aluno-nome-camera').innerText = aluno.nome;
-        document.getElementById('camera-backdrop').style.display = 'block';
-        document.getElementById('camera-modal').style.display = 'block';
-        
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-            .then(s => {
-                window.stream = s;
-                document.getElementById('video').srcObject = s;
-            })
-            .catch(err => {
-                alert("⚠️ Erro ao acessar a câmera. Verifique as permissões do seu navegador.");
-                fecharCamera();
-            });
-    }
+    alunos.forEach((a, i) => {
+        div.innerHTML += `
+        <div class="aluno-item">
+            <span>${i+1}. ${a.nome}</span>
+            ${a.foto_url ? `<img src="${a.foto_url}" class="foto-preview">` : "Sem foto"}
+        </div>`;
+    });
+}
 
-    function fecharCamera() {
-        if (window.stream) window.stream.getTracks().forEach(t => t.stop());
-        document.getElementById('camera-backdrop').style.display = 'none';
-        document.getElementById('camera-modal').style.display = 'none';
-        document.getElementById('btn-capturar').innerText = "📸 Capturar e Salvar";
-        document.getElementById('btn-capturar').disabled = false;
-    }
+async function gerarPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
 
-    async function capturarESalvar() {
-        const btnCapturar = document.getElementById('btn-capturar');
-        btnCapturar.disabled = true;
-        btnCapturar.innerHTML = "⏳ Salvando...";
+    for (let i = 0; i < alunos.length; i++) {
+        const aluno = alunos[i];
 
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
+        if (i > 0) doc.addPage();
 
-        canvas.toBlob(async (blob) => {
-            const fileName = `foto_${alunoAtual.turma}_${alunoAtual.id}_${Date.now()}.jpg`;
-            
-            const { error: storageError } = await supabase.storage
-                .from('fotos')
-                .upload(fileName, blob);
+        doc.text(aluno.nome, 20, 20);
 
-            if (storageError) {
-                alert("Erro ao salvar a foto: " + storageError.message);
-                fecharCamera();
-                return;
-            }
+        if (aluno.foto_url) {
+            try {
+                const img = await fetch(aluno.foto_url);
+                const blob = await img.blob();
 
-            const { data: urlData } = supabase.storage.from('fotos').getPublicUrl(fileName);
-            
-            await supabase.from('estudantes')
-                .update({ foto_url: urlData.publicUrl })
-                .eq('id', alunoAtual.id);
+                const reader = new FileReader();
+                reader.readAsDataURL(blob);
 
-            fecharCamera();
-            carregarDados();
-        }, 'image/jpeg', 0.8);
-    }
-
-    async function getBase64ImageFromUrl(imageUrl) {
-        const res = await fetch(imageUrl);
-        const blob = await res.blob();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    }
-
-    async function gerarPDF() {
-        const btn = document.getElementById('btnGerarPdf');
-        btn.disabled = true;
-
-        try {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'mm', 'a4');
-            
-            const comFoto = alunos.filter(a => a.foto_url);
-            const semFoto = alunos.filter(a => !a.foto_url);
-
-            if (comFoto.length === 0) {
-                alert("Nenhum aluno desta turma possui foto na nuvem ainda!");
-                btn.disabled = false;
-                return;
-            }
-
-            for (let i = 0; i < comFoto.length; i++) {
-                btn.innerHTML = `<span class="loading-spinner"></span> Gerando PDF (${i + 1} de ${comFoto.length})...`;
-                
-                if (i > 0) doc.addPage();
-                
-                const aluno = comFoto[i];
-                doc.setFontSize(30);
-                doc.text(aluno.nome, 148.5, 30, { align: 'center' });
-                
-                try {
-                    const base64Img = await getBase64ImageFromUrl(aluno.foto_url);
-                    const imgProps = doc.getImageProperties(base64Img);
-                    const pdfWidth = 150;
-                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                    const x = (297 - pdfWidth) / 2; 
-                    const y = 50;
-                    
-                    doc.addImage(base64Img, 'JPEG', x, y, pdfWidth, pdfHeight);
-                } catch (err) {
-                    doc.setFontSize(16);
-                    doc.text("(Erro ao carregar a imagem da nuvem)", 148.5, 100, { align: 'center' });
-                }
-            }
-
-            if (semFoto.length > 0) {
-                doc.addPage();
-                doc.setFontSize(20);
-                const turmaFormatada = document.getElementById('seletor-turma').options[document.getElementById('seletor-turma').selectedIndex].text;
-                doc.text(`Pendências - ${turmaFormatada} (Sem Foto):`, 20, 30);
-                
-                doc.setFontSize(14);
-                let y = 45;
-                semFoto.forEach(aluno => {
-                    doc.text(`- ${aluno.nome}`, 20, y);
-                    y += 10;
-                    if (y > 190) {
-                        doc.addPage();
-                        y = 30;
+                await new Promise(res => {
+                    reader.onloadend = () => {
+                        doc.addImage(reader.result, 'JPEG', 20, 30, 100, 100);
+                        res();
                     }
                 });
+            } catch {
+                doc.text("Erro na imagem", 20, 40);
             }
-
-            const turmaSelecionada = document.getElementById('seletor-turma').value;
-            doc.save(`Fotos_${turmaSelecionada}.pdf`);
-
-        } catch (error) {
-            alert("Ocorreu um erro ao gerar o PDF: " + error.message);
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "📄 Imprimir PDF da Turma Atual";
         }
     }
 
-    carregarDados();
+    doc.save("alunos.pdf");
+}
+
+carregarDados();
 </script>
 
 </body>
