@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Fotos - Escola</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- ZIP -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<style>
+body { font-family: Arial; background:#eef2f5; padding:20px; }
+.container { max-width:800px; margin:auto; background:white; padding:30px; border-radius:10px; }
+button { cursor:pointer; padding: 8px 12px; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
+button:hover { background: #f0f0f0; }
+.aluno-item { display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid #eee; align-items: center; }
+.foto-preview { width:50px; height:50px; border-radius:50%; object-fit:cover; }
+
+#camera-modal {
+    display: none;
+    position: fixed;
+    top: 10%;
+    left: 5%;
+    right: 5%;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 100;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    text-align: center;
+}
+
+video { width: 100%; max-width: 400px; background: #000; border-radius: 8px; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h2>📸 Sistema de Fotos</h2>
+
+<select id="seletor-turma" onchange="carregarDados()" style="padding: 8px;">
+    <option value="6A">6º Ano A</option>
+    <option value="6B">6º Ano B</option>
+    <option value="6C">6º Ano C</option>
+    <option value="6D">6º Ano D</option>
+    <option value="6E">6º Ano E</option>
+    <option value="7A">7º Ano A</option>
+    <option value="7B">7º Ano B</option>
+    <option value="7C">7º Ano C</option>
+    <option value="7D">7º Ano D</option>
+    <option value="7E">7º Ano E</option>
+    <option value="7F">7º Ano F</option>
+    <option value="8A">8º Ano A</option>
+    <option value="8B">8º Ano B</option>
+    <option value="8C">8º Ano C</option>
+    <option value="8D">8º Ano D</option>
+    <option value="8E">8º Ano E</option>
+</select>
+
+<button onclick="carregarDados()">🔄 Atualizar</button>
+<button id="btn-pdf" onclick="gerarPDF()" style="background:#28a745;color:white;border:none;">📄 Gerar PDF</button>
+<button id="btn-zip" onclick="baixarFotosZIP()" style="background:#007bff;color:white;border:none;">📦 Baixar Fotos ZIP</button>
+
+<div id="lista-alunos" style="margin-top:20px;">Carregando...</div>
+</div>
+
+<div id="camera-modal">
+    <h3 id="nome-aluno-camera">Fotografando...</h3>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <div style="margin-top:15px; display:flex; gap:10px; justify-content:center;">
+        <button onclick="capturarESalvar()" id="btn-capturar" style="background:#007bff;color:white;border:none;padding:10px 20px;">
+            📸 Capturar e Salvar
+        </button>
+        <button onclick="fecharCamera()" style="background:#dc3545;color:white;border:none;padding:10px 20px;">
+            Cancelar
+        </button>
+    </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://wfmscdwopfaowmgsciks.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_AmrPPfxoZFYSx3gxF1jeuA_ykEv0yC';
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let alunos = [];
+let alunoAtual = null;
+let streamOriginal = null;
+
+async function carregarDados() {
+    const turma = document.getElementById('seletor-turma').value;
+    const div = document.getElementById('lista-alunos');
+
+    div.innerHTML = "Carregando...";
+
+    const { data, error } = await supabaseClient
+        .from('estudantes')
+        .select('*')
+        .eq('turma', turma)
+        .order('nome');
+
+    if (error) {
+        div.innerHTML = "Erro: " + error.message;
+        return;
+    }
+
+    alunos = data;
+    renderizar();
+}
+
+function renderizar() {
+    const div = document.getElementById('lista-alunos');
+    div.innerHTML = "";
+
+    if (!alunos.length) {
+        div.innerHTML = "Nenhum aluno encontrado.";
+        return;
+    }
+
+    let html = "";
+
+    alunos.forEach((a, i) => {
+        html += `
+        <div class="aluno-item">
+            <span>${i+1}. ${a.nome}</span>
+            <div style="display:flex; gap:10px; align-items:center;">
+                ${a.foto_url ? `<img src="${a.foto_url}" class="foto-preview">` : "<span style='color:red'>Sem foto</span>"}
+                <button onclick="abrirCamera('${a.id}','${a.nome}','${a.turma}')">📸 Fotografar</button>
+            </div>
+        </div>`;
+    });
+
+    div.innerHTML = html;
+}
+
+function abrirCamera(id, nome, turma) {
+    alunoAtual = { id, nome, turma };
+
+    document.getElementById('camera-modal').style.display = 'block';
+    document.getElementById('nome-aluno-camera').innerText = "Fotografando: " + nome;
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+            streamOriginal = stream;
+            document.getElementById('video').srcObject = stream;
+        })
+        .catch(err => {
+            alert(err.message);
+            fecharCamera();
+        });
+}
+
+function fecharCamera() {
+    if (streamOriginal) streamOriginal.getTracks().forEach(t => t.stop());
+    document.getElementById('camera-modal').style.display = 'none';
+}
+
+async function capturarESalvar() {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    canvas.toBlob(async (blob) => {
+
+        const fileName = `foto_${alunoAtual.turma}_${alunoAtual.id}_${Date.now()}.jpg`;
+
+        await supabaseClient.storage
+            .from('fotos')
+            .upload(fileName, blob);
+
+        const { data } = supabaseClient.storage
+            .from('fotos')
+            .getPublicUrl(fileName);
+
+        await supabaseClient
+            .from('estudantes')
+            .update({ foto_url: data.publicUrl })
+            .eq('id', alunoAtual.id);
+
+        fecharCamera();
+        carregarDados();
+
+    }, 'image/jpeg', 0.8);
+}
+
+async function baixarFotosZIP() {
+
+    const btn = document.getElementById('btn-zip');
+    btn.disabled = true;
+    btn.innerText = "⏳ Gerando ZIP...";
+
+    const zip = new JSZip();
+
+    const seletor = document.getElementById('seletor-turma');
+
+    for (let i = 0; i < alunos.length; i++) {
+
+        const aluno = alunos[i];
+
+        if (!aluno.foto_url) continue;
+
+        try {
+            const resp = await fetch(aluno.foto_url);
+            const blob = await resp.blob();
+
+            const numero = String(i + 1).padStart(2, '0');
+
+            const nome = aluno.nome
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^\w\s]/gi, "")
+                .replace(/\s+/g, "_");
+
+            const fileName = `${numero}_${nome}_${aluno.turma}.jpg`;
+
+            zip.file(fileName, blob);
+
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    const content = await zip.generateAsync({ type: "blob" });
+
+    saveAs(content, `FOTOS_${seletor.value}_2026.zip`);
+
+    btn.disabled = false;
+    btn.innerText = "📦 Baixar Fotos ZIP";
+}
+
+carregarDados();
+</script>
+
+</body>
+</html>
